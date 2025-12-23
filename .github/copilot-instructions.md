@@ -97,6 +97,12 @@ python src/main.py env=atari params=atari env.train.id=BreakoutNoFrameskip-v4
 - `config/`: Hydra configuration files
 - `outputs/YYYY-MM-DD/HH-MM-SS/`: Run-specific outputs with checkpoints, media, scripts
 
+## Kaggle Notes
+
+- If running on Kaggle, the trainer prefers persistent storage under `/kaggle/working/<repo-name>/outputs/YYYY-MM-DD/HH-MM-SS/checkpoints/`.
+- Use the `-s` (save-mode) flag for `./scripts/play.sh` to record gameplay; recordings and checkpoints are written under the run's `media/` and `checkpoints/` directories respectively.
+- If files disappear in the Kaggle UI, refresh the `/kaggle/working/<repo-name>/outputs/...` path — the code creates a run-specific folder there to improve visibility and persistence.
+
 ### Key Classes
 
 - `Trainer`: Orchestrates training loop and component scheduling

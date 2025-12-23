@@ -61,14 +61,21 @@ class Trainer:
         # Prefer persistent storage when running on Kaggle: use /kaggle/working
         import os
         base_dir = Path('.')
-        if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ or 'KAGGLE_URL_BASE' in os.environ:
-            base_dir = Path('/kaggle/working')
+        running_on_kaggle = 'KAGGLE_KERNEL_RUN_TYPE' in os.environ or 'KAGGLE_URL_BASE' in os.environ
+        if running_on_kaggle:
+            # place run outputs under /kaggle/working/<repo-name>/outputs/YYYY-MM-DD/HH-MM-SS
+            repo_name = Path(hydra.utils.get_original_cwd()).name
+            base_dir = Path('/kaggle/working') / repo_name
 
         # Ensure base exists
         base_dir.mkdir(parents=True, exist_ok=True)
 
-        self.ckpt_dir = base_dir / 'checkpoints'
-        self.media_dir = base_dir / 'media'
+        # create a timestamped run directory (keeps multiple runs separate and visible)
+        run_timestamp = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
+        run_dir = base_dir / 'outputs' / run_timestamp
+
+        self.ckpt_dir = run_dir / 'checkpoints'
+        self.media_dir = run_dir / 'media'
         self.episode_dir = self.media_dir / 'episodes'
         self.reconstructions_dir = self.media_dir / 'reconstructions'
 
@@ -80,7 +87,7 @@ class Trainer:
             assert (self.dataset_dir / 'train').is_dir() and (self.dataset_dir / 'test').is_dir()
 
         if not self.cfg.common.resume:
-            config_dir = base_dir / 'config'
+            config_dir = run_dir / 'config'
             config_path = config_dir / 'trainer.yaml'
             # create config dir only if missing; if it already exists assume we are resuming or inspecting
             config_dir.mkdir(exist_ok=True, parents=True)
@@ -337,10 +344,9 @@ class Trainer:
             self.episode_count_manager.save(self.ckpt_dir / f'episode_count_{epoch}.pt')
 
     def save_checkpoint(self, epoch: int, save_agent_only: bool) -> None:
-        tmp_checkpoint_dir = Path('checkpoints_tmp')
-        shutil.copytree(src=self.ckpt_dir, dst=tmp_checkpoint_dir, ignore=shutil.ignore_patterns('dataset'))
+        # Directly save into the run-specific checkpoints directory.
+        # Avoid copy/delete dance that may confuse Kaggle file browser.
         self._save_checkpoint(epoch, save_agent_only)
-        shutil.rmtree(tmp_checkpoint_dir)
 
     def load_checkpoint(self) -> None:
         assert self.ckpt_dir.is_dir()
