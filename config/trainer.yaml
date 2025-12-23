@@ -12,4 +12,8 @@ wandb:
   tags: null
   notes: null
 
+hydra:
+  run:
+    dir: .
+
 
