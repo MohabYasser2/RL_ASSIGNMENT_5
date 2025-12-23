@@ -92,8 +92,14 @@ class EpisodeDataset(torch.utils.data.Dataset):
         episode_path = self._get_episode_path(episode_id)
         episode_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(episode.__dict__, episode_path.with_suffix('.tmp'))
-        episode_path.with_suffix('.tmp').rename(episode_path)
+        tmp_path = episode_path.with_suffix('.tmp')
 
+        # Windows-safe overwrite
+        if episode_path.exists():
+            episode_path.unlink()
+        
+        tmp_path.rename(episode_path)
+        
         return episode_id
 
     def get_episode_id_from_global_idx(self, global_idx: np.ndarray) -> np.ndarray:
