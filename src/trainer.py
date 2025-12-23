@@ -163,7 +163,7 @@ class Trainer:
                 self.optimizer_tokenizer,
                 can_sample_beyond_end=True,
                 should_update_counts=(epoch > 1),
-                use_mixed_precision=True,
+                use_mixed_precision=False,
                 **cfg_tokenizer
             )
         self.agent.tokenizer.eval()
@@ -175,7 +175,7 @@ class Trainer:
                 can_sample_beyond_end=True,
                 tokenizer=self.agent.tokenizer,
                 should_update_counts=(epoch > 1),
-                use_mixed_precision=True,
+                use_mixed_precision=False,
                 **cfg_world_model
             )
         self.agent.world_model.eval()
