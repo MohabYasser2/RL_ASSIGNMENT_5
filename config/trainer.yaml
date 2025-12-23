@@ -15,5 +15,3 @@ wandb:
 hydra:
   run:
     dir: .
-
-
