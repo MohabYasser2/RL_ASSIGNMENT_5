@@ -140,7 +140,10 @@ class Collector:
 
         metrics_collect = {'#episodes': self.dataset.num_episodes, '#steps': self.dataset.num_steps}
         if len(returns) > 0:
-            metrics_collect['return'] = np.mean(returns)
+            metrics_collect['return_mean'] = np.mean(returns)
+            metrics_collect['return_std'] = np.std(returns)
+            metrics_collect['return_min'] = np.min(returns)
+            metrics_collect['return_max'] = np.max(returns)
         metrics_collect = {f'{self.dataset.name}/{k}': v for k, v in metrics_collect.items()}
         to_log.append(metrics_collect)
 
