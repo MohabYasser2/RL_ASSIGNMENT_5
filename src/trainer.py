@@ -58,8 +58,17 @@ class Trainer:
             self.load_checkpoint()
 
     def make_dirs(self) -> None:
-        self.ckpt_dir = Path('checkpoints')
-        self.media_dir = Path('media')
+        # Prefer persistent storage when running on Kaggle: use /kaggle/working
+        import os
+        base_dir = Path('.')
+        if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ or 'KAGGLE_URL_BASE' in os.environ:
+            base_dir = Path('/kaggle/working')
+
+        # Ensure base exists
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        self.ckpt_dir = base_dir / 'checkpoints'
+        self.media_dir = base_dir / 'media'
         self.episode_dir = self.media_dir / 'episodes'
         self.reconstructions_dir = self.media_dir / 'reconstructions'
 
@@ -71,17 +80,29 @@ class Trainer:
             assert (self.dataset_dir / 'train').is_dir() and (self.dataset_dir / 'test').is_dir()
 
         if not self.cfg.common.resume:
-            config_dir = Path('config')
+            config_dir = base_dir / 'config'
             config_path = config_dir / 'trainer.yaml'
-            config_dir.mkdir(exist_ok=False, parents=False)
+            # create config dir only if missing; if it already exists assume we are resuming or inspecting
+            config_dir.mkdir(exist_ok=True, parents=True)
+            # copy hydra config to run config path (overwrite is fine)
             shutil.copy('.hydra/config.yaml', config_path)
             wandb.save(str(config_path))
-            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "src"), dst="./src")
-            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "scripts"), dst="./scripts")
-            self.ckpt_dir.mkdir(exist_ok=False, parents=False)
-            self.media_dir.mkdir(exist_ok=False, parents=False)
-            self.episode_dir.mkdir(exist_ok=False, parents=False)
-            torch.save(0, self.ckpt_dir / 'epoch.pt')
+            # copy runnable src/scripts into working directory if not already present
+            dst_src = base_dir / 'src'
+            dst_scripts = base_dir / 'scripts'
+            if not dst_src.exists():
+                shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "src"), dst=str(dst_src))
+            if not dst_scripts.exists():
+                shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "scripts"), dst=str(dst_scripts))
+
+            # create main artifact directories
+            self.ckpt_dir.mkdir(exist_ok=True, parents=True)
+            self.media_dir.mkdir(exist_ok=True, parents=True)
+            self.episode_dir.mkdir(exist_ok=True, parents=True)
+            # initialize epoch file to 0 if missing
+            epoch_path = self.ckpt_dir / 'epoch.pt'
+            if not epoch_path.exists():
+                torch.save(0, epoch_path)
 
     def make_envs(self, cfg_env_train: DictConfig, cfg_env_test: DictConfig) -> int:
         episode_manager_train = EpisodeDirManager(self.episode_dir / 'train', max_num_episodes=self.cfg.collection.train.num_episodes_to_save)
