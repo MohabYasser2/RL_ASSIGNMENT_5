@@ -299,6 +299,7 @@ class Trainer:
 
     def _save_checkpoint(self, epoch: int, save_agent_only: bool) -> None:
         torch.save(self.agent.state_dict(), self.ckpt_dir / 'last.pt')
+        torch.save(self.agent.state_dict(), self.ckpt_dir / f'epoch_{epoch}.pt')
 
         if not save_agent_only:
             torch.save(epoch, self.ckpt_dir / 'epoch.pt')
@@ -306,8 +307,13 @@ class Trainer:
                         "optimizer_world_model": self.optimizer_world_model.state_dict(),
                         "optimizer_actor_critic": self.optimizer_actor_critic.state_dict()},
                         self.ckpt_dir / 'optimizer.pt')
+            torch.save({"optimizer_tokenizer": self.optimizer_tokenizer.state_dict(),
+                        "optimizer_world_model": self.optimizer_world_model.state_dict(),
+                        "optimizer_actor_critic": self.optimizer_actor_critic.state_dict()},
+                        self.ckpt_dir / f'optimizer_{epoch}.pt')
             self.train_dataset.save_info()
             self.episode_count_manager.save(self.ckpt_dir / 'episode_count.pt')
+            self.episode_count_manager.save(self.ckpt_dir / f'episode_count_{epoch}.pt')
 
     def save_checkpoint(self, epoch: int, save_agent_only: bool) -> None:
         tmp_checkpoint_dir = Path('checkpoints_tmp')
