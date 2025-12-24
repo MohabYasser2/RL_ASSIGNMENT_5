@@ -1,3 +1,8 @@
+mode: agent_in_env
+fps: 5
+header: 1
+save_mode: 0
+
 defaults:
   - _self_
   - env: crafter

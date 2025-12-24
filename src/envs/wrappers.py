@@ -78,7 +78,12 @@ class NoopResetEnv(gym.Wrapper):
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
-            noops = self.unwrapped.np_random.integers(1, self.noop_max + 1)
+            rng = self.unwrapped.np_random
+            if hasattr(rng, "integers"):
+                noops = rng.integers(1, self.noop_max + 1)
+            else:
+                noops = rng.randint(1, self.noop_max + 1)
+            
 
         for _ in range(noops):
             out = self.env.step(self.noop_action)

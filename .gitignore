@@ -1,8 +1,8 @@
 # Custom
 wandb
 .vscode
-outputs
-checkpoints
+# outputs
+# checkpoints
 media
 experiments
 slurm*

@@ -6,6 +6,7 @@ import shutil
 import sys
 import time
 from typing import Dict, Optional
+import tempfile
 
 import hydra
 from hydra.utils import instantiate
@@ -344,9 +345,53 @@ class Trainer:
             self.episode_count_manager.save(self.ckpt_dir / f'episode_count_{epoch}.pt')
 
     def save_checkpoint(self, epoch: int, save_agent_only: bool) -> None:
-        # Directly save into the run-specific checkpoints directory.
-        # Avoid copy/delete dance that may confuse Kaggle file browser.
-        self._save_checkpoint(epoch, save_agent_only)
+        # Upload checkpoint files to Weights & Biases as an artifact instead
+        # of saving local per-epoch checkpoints. We still serialize the same
+        # set of files but write them into a temporary directory and upload
+        # them as a single artifact so local storage isn't filled each epoch.
+        td = tempfile.TemporaryDirectory()
+        td_path = Path(td.name)
+        try:
+            # save agent state
+            torch.save(self.agent.state_dict(), td_path / 'last.pt')
+            torch.save(self.agent.state_dict(), td_path / f'epoch_{epoch}.pt')
+
+            if not save_agent_only:
+                torch.save(epoch, td_path / 'epoch.pt')
+                torch.save({
+                    "optimizer_tokenizer": self.optimizer_tokenizer.state_dict(),
+                    "optimizer_world_model": self.optimizer_world_model.state_dict(),
+                    "optimizer_actor_critic": self.optimizer_actor_critic.state_dict()
+                }, td_path / 'optimizer.pt')
+                torch.save({
+                    "optimizer_tokenizer": self.optimizer_tokenizer.state_dict(),
+                    "optimizer_world_model": self.optimizer_world_model.state_dict(),
+                    "optimizer_actor_critic": self.optimizer_actor_critic.state_dict()
+                }, td_path / f'optimizer_{epoch}.pt')
+
+                # Save episode counts into the artifact (EpisodeCountManager.save accepts a path)
+                try:
+                    self.episode_count_manager.save(td_path / 'episode_count.pt')
+                    self.episode_count_manager.save(td_path / f'episode_count_{epoch}.pt')
+                except Exception:
+                    # If episode count manager is unavailable, continue without it
+                    pass
+
+            # Create and log a W&B artifact
+            art = wandb.Artifact(name=f'checkpoint-epoch-{epoch}', type='checkpoint', metadata={'epoch': epoch})
+            for f in sorted(td_path.iterdir()):
+                # add_file requires a string path
+                art.add_file(str(f))
+
+            # log artifact to the current run
+            try:
+                wandb.run.log_artifact(art)
+            except Exception:
+                # fallback to wandb.log_artifact if run is not present
+                wandb.log_artifact(art)
+
+        finally:
+            td.cleanup()
 
     def load_checkpoint(self) -> None:
         assert self.ckpt_dir.is_dir()

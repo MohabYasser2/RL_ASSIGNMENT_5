@@ -1,0 +1,3 @@
+- env=atari
+- params=atari
+- env.train.id=BreakoutNoFrameskip-v4
