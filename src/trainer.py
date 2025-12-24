@@ -412,18 +412,57 @@ class Trainer:
             td.cleanup()
 
     def load_checkpoint(self) -> None:
-        assert self.ckpt_dir.is_dir()
-        epoch = torch.load(self.ckpt_dir / 'epoch.pt')
-        if epoch == 0:
-            return 
-        self.start_epoch = epoch + 1
-        self.agent.load(self.ckpt_dir / 'last.pt', device=self.device)
-        ckpt_opt = torch.load(self.ckpt_dir / 'optimizer.pt', map_location=self.device)
-        self.optimizer_tokenizer.load_state_dict(ckpt_opt['optimizer_tokenizer'])
-        self.optimizer_world_model.load_state_dict(ckpt_opt['optimizer_world_model'])
-        self.optimizer_actor_critic.load_state_dict(ckpt_opt['optimizer_actor_critic'])
-        self.episode_count_manager.load(self.ckpt_dir / 'episode_count.pt')
-        print(f'Successfully loaded model and optimizer from {self.ckpt_dir.absolute()}.')
+        # Prefer root-level last.pt if it exists (useful when resuming from
+        # an externally provided checkpoint). Fall back to the run-specific
+        # `ckpt_dir` if needed.
+        root_last = Path(hydra.utils.get_original_cwd()) / 'last.pt'
+        loaded_from_root = False
+
+        if root_last.exists():
+            try:
+                self.agent.load(root_last, device=self.device)
+                loaded_from_root = True
+                print(f'Loaded agent state from root checkpoint: {root_last}')
+            except Exception as e:
+                print(f'Warning: failed to load root last.pt ({root_last}): {e}. Falling back to run checkpoints.')
+
+        # If a run-specific checkpoint directory exists, prefer loading
+        # optimizer/epoch/episode metadata from there when available.
+        if self.ckpt_dir.is_dir():
+            epoch_path = self.ckpt_dir / 'epoch.pt'
+            if epoch_path.exists():
+                epoch = torch.load(epoch_path)
+                if epoch == 0:
+                    return
+                self.start_epoch = epoch + 1
+
+                # If we didn't already load the agent from root, load it from ckpt_dir
+                if not loaded_from_root:
+                    self.agent.load(self.ckpt_dir / 'last.pt', device=self.device)
+
+                # Load optimizer state if present
+                try:
+                    ckpt_opt = torch.load(self.ckpt_dir / 'optimizer.pt', map_location=self.device)
+                    self.optimizer_tokenizer.load_state_dict(ckpt_opt['optimizer_tokenizer'])
+                    self.optimizer_world_model.load_state_dict(ckpt_opt['optimizer_world_model'])
+                    self.optimizer_actor_critic.load_state_dict(ckpt_opt['optimizer_actor_critic'])
+                except Exception:
+                    print('Optimizer checkpoint not found or failed to load; continuing without optimizer state.')
+
+                try:
+                    self.episode_count_manager.load(self.ckpt_dir / 'episode_count.pt')
+                except Exception:
+                    print('Episode count file not found or failed to load.')
+
+                print(f'Successfully loaded model and optimizer from {self.ckpt_dir.absolute()}.')
+            else:
+                if loaded_from_root:
+                    print('No run epoch file found; using root last.pt for agent state only.')
+                else:
+                    raise AssertionError(f'No checkpoint found in {self.ckpt_dir} and no root last.pt present.')
+        else:
+            if not loaded_from_root:
+                raise AssertionError(f'No run checkpoint directory {self.ckpt_dir} and no root last.pt present.')
 
     def finish(self) -> None:
         wandb.finish()
