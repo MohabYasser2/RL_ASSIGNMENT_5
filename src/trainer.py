@@ -349,6 +349,34 @@ class Trainer:
         # of saving local per-epoch checkpoints. We still serialize the same
         # set of files but write them into a temporary directory and upload
         # them as a single artifact so local storage isn't filled each epoch.
+        # Always write a persistent copy of `last.pt` locally so users have a
+        # quick resume file. Create a directory named '<repo_root>/last.pt/' and
+        # write a file '<repo_root>/last.pt/last.pt' and also write a root-level
+        # '<repo_root>/last.pt' file (overwrite).
+        try:
+            repo_root = Path(hydra.utils.get_original_cwd())
+            # root-level file
+            root_file = repo_root / 'last.pt'
+            torch.save(self.agent.state_dict(), root_file)
+            # directory named last.pt containing a copy
+            dir_copy = repo_root / 'last.pt'
+            dir_copy.mkdir(parents=True, exist_ok=True)
+            torch.save(self.agent.state_dict(), dir_copy / 'last.pt')
+        except Exception as e:
+            print(f'Warning: failed to write local last.pt copy: {e}')
+
+        # Upload to W&B only every N epochs to avoid creating many artifacts.
+        # Default to every 10 epochs as requested.
+        checkpoint_every = 10
+        try:
+            # allow override from config if present
+            checkpoint_every = int(self.cfg.common.get('wandb_checkpoint_every', checkpoint_every)) if hasattr(self, 'cfg') and isinstance(self.cfg, DictConfig) else checkpoint_every
+        except Exception:
+            checkpoint_every = 10
+
+        if epoch % checkpoint_every != 0:
+            return
+
         td = tempfile.TemporaryDirectory()
         td_path = Path(td.name)
         try:
