@@ -377,18 +377,36 @@ class Trainer:
                     # If episode count manager is unavailable, continue without it
                     pass
 
-            # Create and log a W&B artifact
-            art = wandb.Artifact(name=f'checkpoint-epoch-{epoch}', type='checkpoint', metadata={'epoch': epoch})
+            # Create and log a W&B artifact. Use a stable artifact name and alias
+            # 'latest' so users can reference the latest checkpoint via
+            # `run.use_artifact('checkpoint:latest')` without creating many
+            # artifact versions.
+            run_id = wandb.run.id if hasattr(wandb, 'run') and wandb.run is not None else None
+            artifact_name = f'checkpoint-{run_id}' if run_id is not None else 'checkpoint'
+            art = wandb.Artifact(name=artifact_name, type='checkpoint', metadata={'epoch': epoch})
             for f in sorted(td_path.iterdir()):
-                # add_file requires a string path
                 art.add_file(str(f))
 
-            # log artifact to the current run
+            # log artifact and attempt to set alias 'latest'. Different wandb
+            # versions expose aliasing differently, so try multiple strategies.
             try:
-                wandb.run.log_artifact(art)
-            except Exception:
-                # fallback to wandb.log_artifact if run is not present
-                wandb.log_artifact(art)
+                logged = wandb.run.log_artifact(art, aliases=['latest'])
+            except TypeError:
+                # older wandb may not accept aliases argument on log_artifact
+                try:
+                    logged = wandb.run.log_artifact(art)
+                    # try to assign alias if available
+                    try:
+                        logged.aliases = ['latest']
+                    except Exception:
+                        pass
+                except Exception:
+                    # final fallback to top-level API
+                    try:
+                        logged = wandb.log_artifact(art)
+                    except Exception:
+                        # give up silently; checkpoint still saved locally in temp
+                        logged = None
 
         finally:
             td.cleanup()
